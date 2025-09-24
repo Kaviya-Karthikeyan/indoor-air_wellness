@@ -1,34 +1,24 @@
 import streamlit as st
-import sqlite3, os, datetime
+import sqlite3, os, datetime, random
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from passlib.hash import pbkdf2_sha256
-import random
 from streamlit_autorefresh import st_autorefresh
 import streamlit.components.v1 as components
 from streamlit_option_menu import option_menu
 import psutil
-
-# Optional: wmi for OpenHardwareMonitor (Windows only)
-try:
-    import wmi
-except ImportError:
-    wmi = None
+import wmi  # For hardware temperature
 
 # =============================
 # CONFIG & DB INIT
 # =============================
 st.set_page_config(page_title="Indoor Air Wellness", layout="wide")
+
 DB_DIR = "data"
 DB_PATH = os.path.join(DB_DIR, "readings.db")
 os.makedirs(DB_DIR, exist_ok=True)
 REFRESH_INTERVAL = 5
-
-IMG_DIR = "images"
-def img_path(filename):
-    base = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base, "images", filename)
 
 def get_conn():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -63,6 +53,14 @@ def init_db():
     return conn
 
 conn = init_db()
+
+# =============================
+# IMAGE HELPER
+# =============================
+IMG_DIR = "images"
+def img_path(filename):
+    base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, "images", filename)
 
 # =============================
 # AUTH HELPERS
@@ -134,8 +132,7 @@ def get_latest_reading(user_id):
 # AQI HELPERS
 # =============================
 def pm25_to_aqi(pm):
-    if pm is None:
-        return None
+    if pm is None: return None
     pm = float(pm)
     bps = [
         (0.0, 12.0, 0, 50),
@@ -175,27 +172,23 @@ def health_tip(cat):
 # LAPTOP TEMPERATURE
 # =============================
 def get_laptop_temperature():
-    # Try WMI
-    if wmi:
-        try:
-            w = wmi.WMI(namespace="root\\OpenHardwareMonitor")
-            sensors = w.Sensor()
-            cpu_temps = [s.Value for s in sensors if s.SensorType == 'Temperature' and ("cpu" in s.Name.lower() or "gpu" in s.Name.lower())]
-            if cpu_temps:
-                return sum(cpu_temps)/len(cpu_temps)
-        except:
-            pass
-    # Try psutil
+    try:
+        w = wmi.WMI(namespace="root\\OpenHardwareMonitor")
+        sensors = w.Sensor()
+        cpu_temps = [s.Value for s in sensors if s.SensorType == 'Temperature' and ("cpu" in s.Name.lower() or "gpu" in s.Name.lower())]
+        if cpu_temps:
+            return sum(cpu_temps)/len(cpu_temps)
+    except Exception:
+        pass
     try:
         temps = psutil.sensors_temperatures()
         if temps:
             for entries in temps.values():
                 for entry in entries:
-                    if hasattr(entry, "current") and entry.current is not None:
+                    if hasattr(entry,"current") and entry.current is not None:
                         return float(entry.current)
-    except:
+    except Exception:
         pass
-    # Fallback
     return random.uniform(30,45)
 
 def generate_virtual_reading(user_id):
@@ -212,34 +205,149 @@ def generate_virtual_reading(user_id):
 # =============================
 # SESSION DEFAULTS
 # =============================
-if 'logged_in' not in st.session_state: st.session_state.logged_in=False
-if 'user' not in st.session_state: st.session_state.user=None
-if 'page' not in st.session_state: st.session_state.page="home"
-if 'last_aqi' not in st.session_state: st.session_state.last_aqi=None
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'user' not in st.session_state:
+    st.session_state.user = None
+if 'page' not in st.session_state:
+    st.session_state.page = "home"
+if 'last_aqi' not in st.session_state:
+    st.session_state.last_aqi = None
 
 # =============================
 # ALERTS
 # =============================
 def speak_browser(text):
-    components.html(f"<script>window.speechSynthesis.speak(new SpeechSynthesisUtterance('{text}'));</script>", height=0)
+    components.html(f"""
+    <script>
+    var msg = new SpeechSynthesisUtterance("{text}");
+    window.speechSynthesis.speak(msg);
+    </script>
+    """, height=0)
 
 def notify_browser(title, body):
-    components.html(f"<script>if(Notification.permission!=='granted')Notification.requestPermission();new Notification('{title}',{{body:'{body}'}});</script>", height=0)
+    components.html(f"""
+    <script>
+    if (Notification.permission !== "granted") {{
+        Notification.requestPermission();
+    }}
+    new Notification("{title}", {{ body: "{body}" }});
+    </script>
+    """, height=0)
 
 def trigger_browser_alerts(aqi, cat):
-    if st.session_state.last_aqi is None or abs(aqi-st.session_state.last_aqi)>=10:
+    if st.session_state.last_aqi is None or abs(aqi - st.session_state.last_aqi) >= 10:
         speak_browser(f"Air quality alert. AQI is {aqi}, {cat}")
         notify_browser("Air Quality Alert", f"AQI is {aqi} — {cat}")
     st.session_state.last_aqi = aqi
 
 # =============================
-# PAGE FUNCTIONS
+# PAGE FUNCTIONS (FULL DEFINITIONS)
 # =============================
-# home, login, signup, dashboard, history, recommendations, patterns, profile, settings
-# (all functions same as your previous code, fully included)
+def page_home():
+    st.title("Indoor Air Wellness")
+    st.write("Monitor and improve your indoor air quality.")
+    st.markdown("---")
+    if not st.session_state.logged_in:
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Login"):
+                st.session_state.page = "login"
+                st.rerun()
+        with col2:
+            if st.button("Sign Up"):
+                st.session_state.page = "signup"
+                st.rerun()
+    else:
+        st.success(f"Logged in as {st.session_state.user['username']}")
+        if st.button("Go to Dashboard"):
+            st.session_state.page = "dashboard"
+            st.rerun()
+
+def page_login():
+    st.title("Login")
+    login = st.text_input("Username or Email")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        user = verify_user(login, password)
+        if user:
+            st.session_state.logged_in = True
+            st.session_state.user = user
+            st.session_state.page = "dashboard"
+            st.success("Login successful")
+            st.rerun()
+        else:
+            st.error("Invalid credentials")
+
+def page_signup():
+    st.title("Sign Up")
+    username = st.text_input("Username")
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
+    if st.button("Sign Up"):
+        success, msg = create_user(username, email, password)
+        if success:
+            st.success(msg)
+        else:
+            st.error(msg)
+
+def page_dashboard():
+    st.title("Dashboard")
+    user_id = st.session_state.user["id"]
+    generate_virtual_reading(user_id)
+    reading = get_latest_reading(user_id)
+    if reading:
+        aqi = pm25_to_aqi(reading["pm25"])
+        cat, color = aqi_category(aqi)
+        st.metric("AQI", aqi, delta=None)
+        st.markdown(f"**Category:** <span style='color:{color}'>{cat}</span>", unsafe_allow_html=True)
+        st.write("Health Tip:", health_tip(cat))
+        trigger_browser_alerts(aqi, cat)
+    else:
+        st.info("No readings yet.")
+
+def page_history():
+    st.title("History")
+    user_id = st.session_state.user["id"]
+    df = get_readings(user_id)
+    if df.empty:
+        st.info("No readings yet")
+    else:
+        st.dataframe(df)
+        fig = px.line(df, x="timestamp", y=["temperature","humidity","co2","pm25","pm10","tvoc"], title="Historical Readings")
+        st.plotly_chart(fig, use_container_width=True)
+
+def page_recommendations():
+    st.title("Recommendations")
+    st.write("Here you can see indoor air quality recommendations based on your readings.")
+    st.info("Use air purifiers, ventilate rooms, avoid smoking indoors.")
+
+def page_patterns():
+    st.title("Patterns")
+    st.write("Analyze patterns in your air quality readings.")
+    user_id = st.session_state.user["id"]
+    df = get_readings(user_id)
+    if not df.empty:
+        fig = px.scatter(df, x="timestamp", y="pm25", color="pm25", title="PM2.5 Patterns")
+        st.plotly_chart(fig)
+
+def page_profile():
+    st.title("Profile")
+    user = st.session_state.user
+    st.write("Username:", user["username"])
+    st.write("Email:", get_user_by_id(user["id"])["email"])
+    st.write("Account created:", get_user_by_id(user["id"])["created_at"])
+
+def page_settings():
+    st.title("Settings")
+    user_id = st.session_state.user["id"]
+    new_pw = st.text_input("Change Password", type="password")
+    if st.button("Update Password"):
+        change_password(user_id, new_pw)
+        st.success("Password updated successfully")
 
 # =============================
-# ROUTER
+# PAGES DICT
 # =============================
 PAGES = {
     "home": page_home,
@@ -253,36 +361,45 @@ PAGES = {
     "settings": page_settings
 }
 
-# Sidebar & page selection (same as your previous code)
+# =============================
+# SIDEBAR ROUTER
+# =============================
 if st.session_state.logged_in:
     with st.sidebar:
         st.markdown('<div style="text-align:center;font-size:22px;font-weight:bold;color:#00ffff">🌍 Navigation</div>', unsafe_allow_html=True)
         try:
-            selected = option_menu(None, ["Dashboard","History","Recommendations","Patterns","Profile","Settings","Logout"],
-                icons=["house","clock-history","lightbulb","bar-chart-line","person-circle","gear","box-arrow-right"], default_index=0, orientation="vertical")
-        except:
-            selected = st.selectbox("Go to", ["Dashboard","History","Recommendations","Patterns","Profile","Settings","Logout"])
-    if selected=="Dashboard": st.session_state.page="dashboard"
-    elif selected=="History": st.session_state.page="history"
-    elif selected=="Recommendations": st.session_state.page="recommendations"
-    elif selected=="Patterns": st.session_state.page="patterns"
-    elif selected=="Profile": st.session_state.page="profile"
-    elif selected=="Settings": st.session_state.page="settings"
-    elif selected=="Logout":
-        st.session_state.logged_in=False
-        st.session_state.user=None
-        st.session_state.page="home"
+            selected = option_menu(
+                None,
+                ["Dashboard", "History", "Recommendations", "Patterns", "Profile", "Settings", "Logout"],
+                icons=["house", "clock-history", "lightbulb", "bar-chart-line", "person-circle", "gear", "box-arrow-right"],
+                default_index=0,
+                orientation="vertical"
+            )
+        except Exception:
+            selected = st.selectbox("Go to", ["Dashboard", "History", "Recommendations", "Patterns", "Profile", "Settings", "Logout"])
+    if selected == "Dashboard": st.session_state.page = "dashboard"
+    elif selected == "History": st.session_state.page = "history"
+    elif selected == "Recommendations": st.session_state.page = "recommendations"
+    elif selected == "Patterns": st.session_state.page = "patterns"
+    elif selected == "Profile": st.session_state.page = "profile"
+    elif selected == "Settings": st.session_state.page = "settings"
+    elif selected == "Logout":
+        st.session_state.logged_in = False
+        st.session_state.user = None
+        st.session_state.page = "home"
         st.rerun()
 else:
     with st.sidebar:
         st.markdown('<div style="text-align:center;font-size:18px;font-weight:bold;color:#00ffff">🔐 Please Login</div>', unsafe_allow_html=True)
         if st.button("Login"):
-            st.session_state.page="login"
+            st.session_state.page = "login"
             st.rerun()
         if st.button("Sign Up"):
-            st.session_state.page="signup"
+            st.session_state.page = "signup"
             st.rerun()
-        st.write("Demo account: create or signup.")
+        st.write("Demo account: try creating one or sign up.")
 
-# Render page
+# =============================
+# RENDER CURRENT PAGE
+# =============================
 PAGES.get(st.session_state.page, page_home)()
