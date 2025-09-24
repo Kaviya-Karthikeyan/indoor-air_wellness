@@ -6,3 +6,5 @@ joblib
 plotly
 matplotlib
 seaborn
+passlib
+streamlit-autorefresh
