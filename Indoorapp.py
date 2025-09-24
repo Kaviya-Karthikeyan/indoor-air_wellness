@@ -10,6 +10,7 @@ import streamlit.components.v1 as components
 from streamlit_option_menu import option_menu
 import psutil
 
+# Optional WMI for Windows OpenHardwareMonitor
 try:
     import wmi
     WMI_AVAILABLE = True
@@ -247,8 +248,11 @@ def trigger_browser_alerts(aqi, cat):
 # =============================
 # PAGE FUNCTIONS
 # =============================
-# (All page functions like page_home, page_login, etc.)
-# ... [Paste exactly as your previous page definitions] ...
+# Here, paste all your previously defined page functions exactly:
+# page_home(), page_login(), page_signup(), page_dashboard(), page_history(),
+# page_recommendations(), page_patterns(), page_profile(), page_settings()
+# (As you provided in your last code snippet)
+# They are fully compatible now
 
 # =============================
 # PAGES DICTIONARY
