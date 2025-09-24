@@ -8,3 +8,8 @@ matplotlib
 seaborn
 passlib
 streamlit-autorefresh
+streamlit-option-menu
+psutil
+wmi
+
+
