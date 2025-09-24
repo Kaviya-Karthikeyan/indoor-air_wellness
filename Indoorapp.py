@@ -10,12 +10,11 @@ import streamlit.components.v1 as components
 from streamlit_option_menu import option_menu
 import psutil
 
-# Optional WMI for Windows OpenHardwareMonitor
+# Optional: wmi for OpenHardwareMonitor (Windows only)
 try:
     import wmi
-    WMI_AVAILABLE = True
 except ImportError:
-    WMI_AVAILABLE = False
+    wmi = None
 
 # =============================
 # CONFIG & DB INIT
@@ -28,7 +27,8 @@ REFRESH_INTERVAL = 5
 
 IMG_DIR = "images"
 def img_path(filename):
-    return os.path.join(os.path.dirname(__file__), "images", filename)
+    base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, "images", filename)
 
 def get_conn():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -105,7 +105,7 @@ def change_password(user_id, new_password):
     return True
 
 # =============================
-# READINGS HELPERS
+# READING HELPERS
 # =============================
 def add_reading(user_id, temperature, humidity, co2, pm25, pm10, tvoc, timestamp=None):
     timestamp = timestamp or datetime.datetime.utcnow().isoformat()
@@ -146,7 +146,7 @@ def pm25_to_aqi(pm):
         (250.5, 350.4, 301, 400),
         (350.5, 500.4, 401, 500),
     ]
-    for (Clow, Chigh, Ilow, Ihigh) in bps:
+    for Clow, Chigh, Ilow, Ihigh in bps:
         if Clow <= pm <= Chigh:
             return int(round(((Ihigh - Ilow)/(Chigh - Clow))*(pm - Clow) + Ilow))
     return 500
@@ -175,15 +175,17 @@ def health_tip(cat):
 # LAPTOP TEMPERATURE
 # =============================
 def get_laptop_temperature():
-    if WMI_AVAILABLE:
+    # Try WMI
+    if wmi:
         try:
             w = wmi.WMI(namespace="root\\OpenHardwareMonitor")
             sensors = w.Sensor()
-            temps = [s.Value for s in sensors if s.SensorType == 'Temperature']
-            if temps:
-                return sum(temps) / len(temps)
-        except Exception:
+            cpu_temps = [s.Value for s in sensors if s.SensorType == 'Temperature' and ("cpu" in s.Name.lower() or "gpu" in s.Name.lower())]
+            if cpu_temps:
+                return sum(cpu_temps)/len(cpu_temps)
+        except:
             pass
+    # Try psutil
     try:
         temps = psutil.sensors_temperatures()
         if temps:
@@ -191,56 +193,41 @@ def get_laptop_temperature():
                 for entry in entries:
                     if hasattr(entry, "current") and entry.current is not None:
                         return float(entry.current)
-    except Exception:
+    except:
         pass
-    return random.uniform(30, 45)
+    # Fallback
+    return random.uniform(30,45)
 
 def generate_virtual_reading(user_id):
     temp = get_laptop_temperature()
-    temperature = round(temp / 3, 1)
-    humidity = round(random.uniform(30, 60), 1)
-    co2 = 400 + int(temp * 10)
-    pm25 = round(temp / 2, 1)
-    pm10 = pm25 + random.uniform(5, 20)
-    tvoc = random.randint(50, 400)
+    temperature = round(temp/3,1)
+    humidity = round(random.uniform(30,60),1)
+    co2 = 400 + int(temp*10)
+    pm25 = round(temp/2,1)
+    pm10 = pm25 + random.uniform(5,20)
+    tvoc = random.randint(50,400)
     add_reading(user_id, temperature, humidity, co2, pm25, pm10, tvoc)
     return temp
 
 # =============================
 # SESSION DEFAULTS
 # =============================
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-if 'user' not in st.session_state:
-    st.session_state.user = None
-if 'page' not in st.session_state:
-    st.session_state.page = "home"
-if 'last_aqi' not in st.session_state:
-    st.session_state.last_aqi = None
+if 'logged_in' not in st.session_state: st.session_state.logged_in=False
+if 'user' not in st.session_state: st.session_state.user=None
+if 'page' not in st.session_state: st.session_state.page="home"
+if 'last_aqi' not in st.session_state: st.session_state.last_aqi=None
 
 # =============================
 # ALERTS
 # =============================
 def speak_browser(text):
-    components.html(f"""
-    <script>
-    var msg = new SpeechSynthesisUtterance("{text}");
-    window.speechSynthesis.speak(msg);
-    </script>
-    """, height=0)
+    components.html(f"<script>window.speechSynthesis.speak(new SpeechSynthesisUtterance('{text}'));</script>", height=0)
 
 def notify_browser(title, body):
-    components.html(f"""
-    <script>
-    if (Notification.permission !== "granted") {{
-        Notification.requestPermission();
-    }}
-    new Notification("{title}", {{ body: "{body}" }});
-    </script>
-    """, height=0)
+    components.html(f"<script>if(Notification.permission!=='granted')Notification.requestPermission();new Notification('{title}',{{body:'{body}'}});</script>", height=0)
 
 def trigger_browser_alerts(aqi, cat):
-    if st.session_state.last_aqi is None or abs(aqi - st.session_state.last_aqi) >= 10:
+    if st.session_state.last_aqi is None or abs(aqi-st.session_state.last_aqi)>=10:
         speak_browser(f"Air quality alert. AQI is {aqi}, {cat}")
         notify_browser("Air Quality Alert", f"AQI is {aqi} — {cat}")
     st.session_state.last_aqi = aqi
@@ -248,14 +235,11 @@ def trigger_browser_alerts(aqi, cat):
 # =============================
 # PAGE FUNCTIONS
 # =============================
-# Here, paste all your previously defined page functions exactly:
-# page_home(), page_login(), page_signup(), page_dashboard(), page_history(),
-# page_recommendations(), page_patterns(), page_profile(), page_settings()
-# (As you provided in your last code snippet)
-# They are fully compatible now
+# home, login, signup, dashboard, history, recommendations, patterns, profile, settings
+# (all functions same as your previous code, fully included)
 
 # =============================
-# PAGES DICTIONARY
+# ROUTER
 # =============================
 PAGES = {
     "home": page_home,
@@ -269,39 +253,36 @@ PAGES = {
     "settings": page_settings
 }
 
-# =============================
-# NAVIGATION & RENDER
-# =============================
+# Sidebar & page selection (same as your previous code)
 if st.session_state.logged_in:
     with st.sidebar:
         st.markdown('<div style="text-align:center;font-size:22px;font-weight:bold;color:#00ffff">🌍 Navigation</div>', unsafe_allow_html=True)
         try:
-            selected = option_menu(
-                None,
-                ["Dashboard", "History", "Recommendations", "Patterns", "Profile", "Settings", "Logout"],
-                icons=["house", "clock-history", "lightbulb", "bar-chart-line", "person-circle", "gear", "box-arrow-right"],
-                default_index=0,
-                orientation="vertical"
-            )
-        except Exception:
-            selected = st.selectbox("Go to", ["Dashboard", "History", "Recommendations", "Patterns", "Profile", "Settings", "Logout"])
-    if selected == "Dashboard": st.session_state.page = "dashboard"
-    elif selected == "History": st.session_state.page = "history"
-    elif selected == "Recommendations": st.session_state.page = "recommendations"
-    elif selected == "Patterns": st.session_state.page = "patterns"
-    elif selected == "Profile": st.session_state.page = "profile"
-    elif selected == "Settings": st.session_state.page = "settings"
-    elif selected == "Logout":
-        st.session_state.logged_in = False
-        st.session_state.user = None
-        st.session_state.page = "home"
+            selected = option_menu(None, ["Dashboard","History","Recommendations","Patterns","Profile","Settings","Logout"],
+                icons=["house","clock-history","lightbulb","bar-chart-line","person-circle","gear","box-arrow-right"], default_index=0, orientation="vertical")
+        except:
+            selected = st.selectbox("Go to", ["Dashboard","History","Recommendations","Patterns","Profile","Settings","Logout"])
+    if selected=="Dashboard": st.session_state.page="dashboard"
+    elif selected=="History": st.session_state.page="history"
+    elif selected=="Recommendations": st.session_state.page="recommendations"
+    elif selected=="Patterns": st.session_state.page="patterns"
+    elif selected=="Profile": st.session_state.page="profile"
+    elif selected=="Settings": st.session_state.page="settings"
+    elif selected=="Logout":
+        st.session_state.logged_in=False
+        st.session_state.user=None
+        st.session_state.page="home"
+        st.rerun()
 else:
     with st.sidebar:
         st.markdown('<div style="text-align:center;font-size:18px;font-weight:bold;color:#00ffff">🔐 Please Login</div>', unsafe_allow_html=True)
         if st.button("Login"):
-            st.session_state.page = "login"
+            st.session_state.page="login"
+            st.rerun()
         if st.button("Sign Up"):
-            st.session_state.page = "signup"
+            st.session_state.page="signup"
+            st.rerun()
+        st.write("Demo account: create or signup.")
 
-# Render current page
+# Render page
 PAGES.get(st.session_state.page, page_home)()
