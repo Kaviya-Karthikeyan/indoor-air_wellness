@@ -318,7 +318,12 @@ PAGES = {
     "home": page_home,
     "login": page_login,
     "signup": page_signup,
-    # add all other pages here as in your full code
+    "dashboard": page_dashboard,
+    "history": page_history,
+    "recommendations": page_recommendations,
+    "patterns": page_patterns,
+    "profile": page_profile,
+    "settings": page_settings
 }
 
 # =============================
@@ -330,3 +335,4 @@ PAGES = {
 # Render current page
 # =============================
 PAGES.get(st.session_state.page, page_home)()
+
