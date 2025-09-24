@@ -403,13 +403,13 @@ def page_recommendations():
     st.markdown("### 🌱 Suggested Indoor Plants")
     cols = st.columns(3)
     with cols[0]:
-        st.image(img_path("areca_palm.jpg"), width=120)
+        st.image("areca_palm.jpg", width=120)
         st.caption("Areca Palm – Absorbs CO₂ effectively")
     with cols[1]:
-        st.image(img_path("snake_plant.jpg"), width=120)
+        st.image("areca_palm.jpg", width=120)
         st.caption("Snake Plant – Releases O₂ at night")
     with cols[2]:
-        st.image(img_path("peace_lily.jpg"), width=120)
+        st.image("peace_lily.jpg", width=120)
         st.caption("Peace Lily – Absorbs VOCs & toxins")
 
     st.markdown("---")
