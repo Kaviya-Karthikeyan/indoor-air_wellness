@@ -1,5 +1,5 @@
 import streamlit as st
-import sqlite3, os, datetime, random
+import sqlite3, os, datetime
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -8,7 +8,7 @@ from streamlit_autorefresh import st_autorefresh
 import streamlit.components.v1 as components
 from streamlit_option_menu import option_menu
 import psutil
-import wmi  # For hardware temperature
+import random
 
 # =============================
 # CONFIG & DB INIT
@@ -172,24 +172,18 @@ def health_tip(cat):
 # LAPTOP TEMPERATURE
 # =============================
 def get_laptop_temperature():
-    try:
-        w = wmi.WMI(namespace="root\\OpenHardwareMonitor")
-        sensors = w.Sensor()
-        cpu_temps = [s.Value for s in sensors if s.SensorType == 'Temperature' and ("cpu" in s.Name.lower() or "gpu" in s.Name.lower())]
-        if cpu_temps:
-            return sum(cpu_temps)/len(cpu_temps)
-    except Exception:
-        pass
+    # Try to get actual sensor temps if available
     try:
         temps = psutil.sensors_temperatures()
         if temps:
             for entries in temps.values():
                 for entry in entries:
-                    if hasattr(entry,"current") and entry.current is not None:
+                    if hasattr(entry, "current") and entry.current is not None:
                         return float(entry.current)
     except Exception:
         pass
-    return random.uniform(30,45)
+    # Fallback to a random temperature
+    return random.uniform(30, 45)
 
 def generate_virtual_reading(user_id):
     temp = get_laptop_temperature()
